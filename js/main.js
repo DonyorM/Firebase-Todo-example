@@ -2,13 +2,43 @@
 //features
 //store in localstorage of browser
 //delete list items
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/9.6.6/firebase-auth.js';
 
+const auth = getAuth();
+const addButton = document.getElementById('addButton');
+const addInput = document.getElementById('itemInput');
+const todoList = document.getElementById('todoList');
+const signIn = document.getElementById('signIn');
+const main = document.getElementById('main');
+const signInBtn = document.getElementById('signInBtn');
+const signOutBtn = document.getElementById('signOutBtn');
 
-var addButton = document.getElementById('addButton');
-var addInput = document.getElementById('itemInput');
-var todoList = document.getElementById('todoList');
 var listArray = [];
+var signedInUser = null;
 //declare addToList function
+
+function onSign() {
+    // Remember to enable Username and Password sign up in the firebase console
+    let email = document.getElementById("username").value;
+    let password = document.getElementById("password").value;
+    signInWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+            signedInUser = userCredential.user;
+        })
+        .catch((error) => {
+            if (error.code === "auth/user-not-found") {
+                createUserWithEmailAndPassword(auth, email, password).catch(e => {
+                    console.log(e.code);
+                });
+            } else {
+                console.log(error.code);
+            }
+        });
+}
+
+function onSignOut() {
+    signOut(auth);
+}
 
 function listItemObj(content, status) {
     return {
@@ -145,7 +175,21 @@ window.onload = function () {
 
     }
 
+    onAuthStateChanged(auth, (user) => {
+        signedInUser = user;
+
+        if (user) {
+            signIn.classList.add("hidden");
+            main.classList.remove("hidden");
+        } else {
+            main.classList.add("hidden");
+            signIn.classList.remove("hidden");
+        }
+    });
+
 };
 //add an event binder to the button
 addButton.addEventListener('click', addToList);
 clearButton.addEventListener('click', clearList);
+signInBtn.addEventListener('click', onSign);
+signOutBtn.addEventListener('click', onSignOut);

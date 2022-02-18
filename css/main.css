@@ -14,3 +14,8 @@
 #todoList .btn{
     margin-left: 10px;
 }
+
+.vertical-align {
+    display: flex;
+    align-items: center;
+}
