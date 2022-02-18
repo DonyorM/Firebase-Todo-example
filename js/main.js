@@ -1,10 +1,15 @@
-//Todo list app by Afolabi Sheriff
-//features
-//store in localstorage of browser
-//delete list items
+// Todo list app by Afolabi Sheriff
+// Firebase integration by Daniel Manila
+
+// Remember to enable Username and Password sign up in the firebase console
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/9.6.6/firebase-auth.js';
+// Remember to enable firestore in the firebase console and set the rules to those set in the "firebase.rules" file
+import { getFirestore, doc, setDoc, collection, onSnapshot, getDocs, deleteDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.6.6/firebase-firestore.js';
+
 
 const auth = getAuth();
+const db = getFirestore();
+
 const addButton = document.getElementById('addButton');
 const addInput = document.getElementById('itemInput');
 const todoList = document.getElementById('todoList');
@@ -15,10 +20,10 @@ const signOutBtn = document.getElementById('signOutBtn');
 
 var listArray = [];
 var signedInUser = null;
-//declare addToList function
+
+var currentSnapshotUnsubscribe = null;
 
 function onSign() {
-    // Remember to enable Username and Password sign up in the firebase console
     let email = document.getElementById("username").value;
     let password = document.getElementById("password").value;
     signInWithEmailAndPassword(auth, email, password)
@@ -46,44 +51,38 @@ function listItemObj(content, status) {
         status: "incomplete"
     };
 }
-var changeToComp = function () {
+var changeToComp = async function () {
     var parent = this.parentElement;
-    console.log('Changed to complete');
-    parent.className = 'uncompleted well';
-    this.innerText = 'Incomplete';
+    const content = parent.firstChild.innerText;
+
+    const ref = doc(db, "app/todos", signedInUser.uid, content);
+    await updateDoc(ref, {
+        status: "complete"
+    });
+
     this.removeEventListener('click', changeToComp);
     this.addEventListener('click', changeToInComp);
-    changeListArray(parent.firstChild.innerText, 'complete');
-
 }
 
-var changeToInComp = function () {
+var changeToInComp = async function () {
     var parent = this.parentElement;
-    console.log('Changed to incomplete');
-    parent.className = 'completed well';
-    this.innerText = 'Complete';
+    const content = parent.firstChild.innerText;
+
+    const ref = doc(db, "app/todos", signedInUser.uid, content);
+    await updateDoc(ref, {
+        status: "incomplete"
+    });
+
     this.removeEventListener('click', changeToInComp);
     this.addEventListener('click', changeToComp);
-
-    changeListArray(parent.firstChild.innerText, 'incomplete');
-
 }
 
 var removeItem = function () {
     var parent = this.parentElement.parentElement;
-    parent.removeChild(this.parentElement);
 
-    var data = this.parentElement.firstChild.innerText;
-    for (var i = 0; i < listArray.length; i++) {
-
-        if (listArray[i].content == data) {
-            listArray.splice(i, 1);
-            refreshLocal();
-            break;
-        }
-    }
-
-
+    var content = this.parentElement.firstChild.innerText;    
+    const ref = doc(db, "app/todos", signedInUser.uid, content);
+    deleteDoc(ref);
 }
 
 //function to change the todo list array
@@ -139,40 +138,44 @@ var refreshLocal = function () {
     localStorage.setItem('todoList', JSON.stringify(todos));
 }
 
-var addToList = function () {
-    var newItem = new listItemObj();
+var addToList = async function () {
+    var newItem = listItemObj();
     newItem.content = addInput.value;
-    listArray.push(newItem);
-    //add to the local storage
-    refreshLocal();
-    //change the dom
-    var item = createItemDom(addInput.value, 'incomplete');
-    todoList.appendChild(item);
-    addInput.value = '';
+
+    const userId = signedInUser.uid;
+    await setDoc(doc(db, "app/todos", userId, newItem.content), newItem);
 }
 
 //function to clear todo list array
-var clearList = function () {
-    listArray = [];
-    localStorage.removeItem('todoList');
-    todoList.innerHTML = '';
+var clearList = async function () {
+    const userId = signedInUser.uid;
+    const col = collection(db, "app/todos", userId);
+    const querySnapshot = await getDocs(col);
+    querySnapshot.forEach(doc => {
+        deleteDoc(doc.ref);
+    });
+}
 
+function loadTodos() {
+    if (currentSnapshotUnsubscribe) {
+        currentSnapshotUnsubscribe();
+    }
+    const userId = signedInUser.uid;
+    const col = collection(db, "app/todos", userId);
+    currentSnapshotUnsubscribe = onSnapshot(col, (querySnapshot) => {
+        todoList.innerHTML = '';
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            const dom = createItemDom(data.content, data.status);
+            todoList.appendChild(dom);
+        });
+    });
 }
 
 window.onload = function () {
-    var list = localStorage.getItem('todoList');
 
-    if (list != null) {
-        var todos = JSON.parse(list);
-        listArray = todos;
-
-        for (var i = 0; i < listArray.length; i++) {
-            var data = listArray[i].content;
-
-            var item = createItemDom(data, listArray[i].status);
-            todoList.appendChild(item);
-        }
-
+    if (signedInUser) {
+        loadTodos();
     }
 
     onAuthStateChanged(auth, (user) => {
@@ -181,6 +184,7 @@ window.onload = function () {
         if (user) {
             signIn.classList.add("hidden");
             main.classList.remove("hidden");
+            loadTodos();
         } else {
             main.classList.add("hidden");
             signIn.classList.remove("hidden");
